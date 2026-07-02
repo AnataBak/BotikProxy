@@ -26,13 +26,16 @@ export default async function handler(req, res) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
 
+        // Убираем префикс "models/" из model, если он есть,
+        // чтобы не получить models/models/...
+        const cleanModel = model.startsWith("models/") ? model.slice(7) : model;
+
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
             {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-goog-api-key": apiKey,
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal,
@@ -52,6 +55,7 @@ export default async function handler(req, res) {
             });
         }
 
+        // Возвращаем ВЕСЬ ответ Gemini как есть, включая ошибки
         return res.status(response.status).json(data);
 
     } catch (err) {
