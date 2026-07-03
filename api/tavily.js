@@ -11,12 +11,10 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: "Method Not Allowed" });
     }
 
-    const apiKey = process.env.TAVILY_API_KEY;
-    if (!apiKey) {
-        return res.status(500).json({ error: "TAVILY_API_KEY is not configured" });
+    const { api_key, query, max_results } = req.body;
+    if (!api_key) {
+        return res.status(400).json({ error: "Field 'api_key' is required" });
     }
-
-    const { query, max_results } = req.body;
     if (!query) {
         return res.status(400).json({ error: "Field 'query' is required" });
     }
@@ -31,7 +29,7 @@ export default async function handler(req, res) {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                api_key: apiKey,
+                api_key: api_key,
                 query: query,
                 max_results: max_results || 5,
                 include_answer: true,
