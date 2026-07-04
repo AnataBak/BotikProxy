@@ -24,14 +24,24 @@ export default async function handler(req, res) {
 
     try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000);
+        const timeout = setTimeout(() => controller.abort(), 60000);
 
-        // Убираем префикс "models/" из model, если он есть,
-        // чтобы не получить models/models/...
+        // Убираем префикс "models/" из model, если он есть
         const cleanModel = model.startsWith("models/") ? model.slice(7) : model;
 
+        // Определяем, TTS ли это модель
+        const isTTS = cleanModel.includes("tts");
+
+        let endpoint;
+        if (isTTS) {
+            // TTS модели используют другой endpoint
+            endpoint = `https://generativelanguage.googleapis.com/v1/models/${cleanModel}:generateContent?key=${apiKey}`;
+        } else {
+            endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
+        }
+
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
+            endpoint,
             {
                 method: "POST",
                 headers: {
@@ -55,7 +65,36 @@ export default async function handler(req, res) {
             });
         }
 
-        // Возвращаем ВЕСЬ ответ Gemini как есть, включая ошибки
+        // Если v1beta вернул 404 и это TTS модель — пробуем v1
+        if (!isTTS && response.status === 404 && cleanModel.includes("tts")) {
+            clearTimeout(timeout);
+            const controller2 = new AbortController();
+            const timeout2 = setTimeout(() => controller2.abort(), 60000);
+            
+            const response2 = await fetch(
+                `https://generativelanguage.googleapis.com/v1/models/${cleanModel}:generateContent?key=${apiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                    signal: controller2.signal,
+                }
+            );
+            clearTimeout(timeout2);
+            
+            try {
+                data = await response2.json();
+            } catch {
+                const text = await response2.text();
+                return res.status(response2.status).json({
+                    error: "Invalid response from Gemini API",
+                    detail: text.slice(0, 500),
+                });
+            }
+            return res.status(response2.status).json(data);
+        }
+
+        // Возвращаем ВЕСЬ ответ Gemini как есть
         return res.status(response.status).json(data);
 
     } catch (err) {
